@@ -19,10 +19,11 @@
 //    ウィジェット長押し > 「ウィジェットを編集」> Script を選択
 //
 //    円形ウィジェットの場合、Parameter で表示項目を指定:
-//      session  → 現在のセッション（デフォルト）
-//      weekly   → すべてのモデル（週間）
-//      sonnet   → Sonnetのみ
-//      opus     → Opusのみ
+//      5h     → 現在のセッション
+//      7d     → 週間制限（すべてのプラン）
+//      model  → モデル別制限
+//
+//    Parameter未指定の場合は先頭の項目を表示
 //    複数配置して、それぞれ異なる Parameter を設定してください。
 //
 // 【データの更新】
@@ -363,16 +364,9 @@ function fmtAge(isoStr) {
 
 // Parameter 文字列から API キーへのマッピング
 const PARAM_MAP = {
-  session: "session",
   "5h": "session",
-
-  weekly: "weekly_all",
   "7d": "weekly_all",
-  all: "weekly_all",
-
-  fable: "Fable",
-  sonnet: "Sonnet",
-  opus: "Opus",
+  "model": "weekly_scoped",
 };
 
 // 表示ラベル（短縮版をロック画面用に追加）
@@ -440,16 +434,40 @@ function parse(raw) {
 function getItemByParam(items, param) {
   if (param) {
     const p = param.trim().toLowerCase();
+
     const key = PARAM_MAP[p];
 
     if (key) {
-      const found = items.find((it) =>
-        it.key === key ||
-        it.label.toLowerCase() === key.toLowerCase()
+
+      // 通常項目
+      const found = items.find(
+        (it) => it.key === key
       );
 
       if (found) return found;
+
+
+      // モデル別制限
+      // weekly_scoped が複数ある場合は
+      // 最初のモデルを表示
+      if (key === "weekly_scoped") {
+        const model = items.find(
+          (it) => it.key === "weekly_scoped"
+        );
+
+        if (model) return model;
+      }
     }
+
+
+    // モデル名指定
+    const model = items.find(
+      (it) =>
+        it.label &&
+        it.label.toLowerCase() === p
+    );
+
+    if (model) return model;
   }
 
   return items[0] || null;
