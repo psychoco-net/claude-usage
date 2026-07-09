@@ -192,7 +192,7 @@ async function fetchUsageLive() {
     return { ok: false, data: null, err: result.err };
   }
 
-  if (!result.data || result.data.five_hour === undefined) {
+  if (!result.data || !Array.isArray(result.data.limits)) {
     return { ok: false, data: result.data, err: "unexpected format" };
   }
 
@@ -363,50 +363,71 @@ function fmtAge(isoStr) {
 
 // Parameter 文字列から API キーへのマッピング
 const PARAM_MAP = {
-  session: "five_hour",
-  "5h":    "five_hour",
-  weekly:  "seven_day",
-  "7d":    "seven_day",
-  sonnet:  "seven_day_sonnet",
-  opus:    "seven_day_opus",
-  oauth:   "seven_day_oauth_apps",
-  cowork:  "seven_day_cowork",
+  session: "session",
+  "5h": "session",
+
+  weekly: "weekly_all",
+  "7d": "weekly_all",
+  all: "weekly_all",
+
+  fable: "Fable",
+  sonnet: "Sonnet",
+  opus: "Opus",
 };
 
 // 表示ラベル（短縮版をロック画面用に追加）
 const DEFS = [
-  { key: "five_hour",            label: "現在のセッション", short: "5h",      section: "プラン使用制限" },
-  { key: "seven_day",            label: "すべてのモデル",   short: "7d All",   section: "週間制限" },
-  { key: "seven_day_sonnet",     label: "Sonnetのみ",      short: "Sonnet",  section: "週間制限" },
-  { key: "seven_day_opus",       label: "Opusのみ",        short: "Opus",    section: "週間制限" },
-  { key: "seven_day_oauth_apps", label: "OAuthアプリ",     short: "OAuth",   section: "週間制限" },
-  { key: "seven_day_cowork",     label: "Cowork",          short: "Cowrk",   section: "週間制限" },
+  {
+    key: "session",
+    label: "プラン使用量",
+    short: "5h",
+    section: "現在のセッション",
+  },
+  {
+    key: "weekly_all",
+    label: "すべてのプラン",
+    short: "All",
+    section: "週間制限",
+  },
+  {
+    key: "weekly_scoped",
+    label: null,
+    short: null,
+    section: "週間制限",
+  },
 ];
 
 function parse(raw) {
   const items = [];
 
-  for (const def of DEFS) {
-    const entry = raw[def.key];
-    if (!entry || entry.utilization === undefined) continue;
-    const pct = toPct(entry.utilization);
-    if (pct === null) continue;
-    items.push({
-      key: def.key,
-      label: def.label,
-      short: def.short,
-      pct,
-      reset: entry.resets_at || null,
-      section: def.section,
-    });
-  }
+  for (const limit of (raw.limits ?? [])) {
 
-  const ex = raw.extra_usage;
-  if (ex && ex.is_enabled && ex.utilization !== null && ex.utilization !== undefined) {
-    const pct = toPct(ex.utilization);
-    if (pct !== null) {
-      items.push({ key: "extra", label: "追加使用量", short: "Extra", pct, reset: null, section: "追加使用量" });
-    }
+    const def = DEFS.find(d => d.key === limit.kind);
+
+    const modelName =
+      limit.scope?.model?.display_name ?? null;
+
+    items.push({
+      key: limit.kind,
+      label:
+        def?.label ??
+        modelName ??
+        limit.kind,
+
+      short:
+        def?.short ??
+        modelName ??
+        limit.kind,
+
+      pct: limit.percent,
+      reset: limit.resets_at || null,
+
+      section:
+        def?.section ??
+        (limit.group === "weekly"
+          ? "週間制限"
+          : limit.group),
+    });
   }
 
   return items;
@@ -418,12 +439,19 @@ function parse(raw) {
  */
 function getItemByParam(items, param) {
   if (param) {
-    const key = PARAM_MAP[param.trim().toLowerCase()];
+    const p = param.trim().toLowerCase();
+    const key = PARAM_MAP[p];
+
     if (key) {
-      const found = items.find((it) => it.key === key);
+      const found = items.find((it) =>
+        it.key === key ||
+        it.label.toLowerCase() === key.toLowerCase()
+      );
+
       if (found) return found;
     }
   }
+
   return items[0] || null;
 }
 
